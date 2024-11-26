@@ -44,10 +44,7 @@ sliding_window_sec = 60
 
 step_sec=10
 
-for i,tb in enumerate(BINDING_TIMES):
-
-    clot_growths = []
-    attachments = []
+for i,tb in enumerate(BINDING_TIMES):  
     
     try:
         [avg_growth,
@@ -59,6 +56,8 @@ for i,tb in enumerate(BINDING_TIMES):
          activation] = pickle.load(open(f'EAnoD/averages for t_bind = {tb}.pkl','rb'))
 
     except:
+        clot_growths = []
+        attachments = []
         for rep in range(1,n_repeats+1):
             save_name = f'EAnoD/Simulation {rep} with initial binding time = {tb}.pkl'
             
