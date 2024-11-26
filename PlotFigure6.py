@@ -8,6 +8,7 @@ Created on Mon Nov 25 16:34:04 2024
 import pickle
 import matplotlib.pyplot as plt
 import numpy as np
+from RunSimulation import RunSimulation
 
 
 # Get the default color cycle
@@ -27,21 +28,80 @@ save_format = 'svg'
 
 step = 1000
 
-initial_binding_times = [0.05, 0.2, 0.5]
 
-for i,t in enumerate(initial_binding_times):
-    [avg_growth,
-     stdev_growth,
-     avg_growth_rate,
-     stdev_growth_rate,
-     times_growth,
-     times,
-     activation] = pickle.load(open(f'EAnoD/averages for t_bind = {t}.pkl','rb'))
+BINDING_TIMES = [0.05, 0.2, 0.5]
+n_repeats = 10
+T = 600
+HALF_ACTIVATION_SEC = 0.2
+
+averages = []
+errors = []
+
+
+sliding_window_sec = 60
+
+
+
+step_sec=10
+
+for i,tb in enumerate(BINDING_TIMES):
+
+    clot_growths = []
+    attachments = []
+    
+    try:
+        [avg_growth,
+         stdev_growth,
+         avg_growth_rate,
+         stdev_growth_rate,
+         times_growth,
+         times,
+         activation] = pickle.load(open(f'EAnoD/averages for t_bind = {tb}.pkl','rb'))
+
+    except:
+        for rep in range(1,n_repeats+1):
+            save_name = f'EAnoD/Simulation {rep} with initial binding time = {tb}.pkl'
+            
+            try:
+                results = pickle.load(open(save_name, 'rb'))
+            except:               
+                results = RunSimulation(save_file=save_name,
+                                        T = T,
+                                        BINDING_TIME_SEC=tb,
+                                        HALF_ACTIVATION_SEC = HALF_ACTIVATION_SEC)
+                
+            
+            Nt = len(results['clot size'])
+            Nt_window = int(sliding_window_sec / results['Δt'])
+            N_steps = int(step_sec / results['Δt'])
+            binding_rate = [np.sum(results['binding_events'][t:t+Nt_window])/sliding_window_sec for t in range(Nt-Nt_window)]
+            
+            clot_growths.append(results['clot size'])
+            attachments.append(binding_rate)
+    
+            
+        times_growth = [results['Δt'] * i for i in range(len(results['clot size']))]
+
+        avg_growth = np.mean(np.array(clot_growths), axis=0)
+        stdev_growth = np.std(np.array(clot_growths), axis=0)
+                
+        times = [results['Δt'] * i for i in range(Nt_window, Nt)]
+        avg_att = np.mean(np.array(attachments), axis=0)
+        stdev_att = np.std(np.array(attachments), axis=0)
+        
+        pickle.dump([avg_growth,
+                      stdev_growth,
+                      avg_att,
+                      stdev_att,
+                      times_growth,
+                      times,
+                      results['final activation']],
+                    open(f'EAnoD/averages for t_bind = {tb}.pkl','wb'))
     
     ax1.plot(times_growth[::step], avg_growth[::step], lw=0.5)
     ax1.fill_between(times_growth[::step], avg_growth[::step]-stdev_growth[::step], avg_growth[::step]+stdev_growth[::step],alpha=0.6, edgecolor='none')
     
-    ax2.plot(times[::step], avg_growth_rate[::step],linewidth=0.5,color=colors[i % len(colors)], label=f'{int(t*1000)} ms')
+    ax2.plot(times[::step], avg_growth_rate[::step],linewidth=0.5,color=colors[i % len(colors)], label=f'{int(tb*1000)} ms')
     ax2.fill_between(times[::step], avg_growth_rate[::step]-stdev_growth_rate[::step], avg_growth_rate[::step]+stdev_growth_rate[::step], alpha=0.6, color=colors[i % len(colors)], edgecolor='none')
     
    
