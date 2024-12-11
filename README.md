@@ -1,1 +1,2 @@
-# ThrombusFormation
+This repository contains the code and simulated data developed for Cinotti, Gibbins, Oderberg, Hill, Austin, & Bojak
+The entrance points consist in the 10 PlotFigure#.py which plot the corresponding figures from the paper (with additional modifications carried out in Inkscape) and which rely on launching RunSimulations.py with different settings. RunSimulations.py calls on functions from PlateletModel.py which contains the different mechanisms that model platelet binding, detaching, and activating, and LBMfunctions.py which contains the Computational Fluid Dynamics module.
