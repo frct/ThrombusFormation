@@ -38,35 +38,12 @@ slow_std = df['slow_stdDev']
 LOAD SIMULATED DATA
 ##############################################################'''
 
-res = pickle.load(open('optimisation results/optimization_results beta and pd.pkl', 'rb'))
+res = pickle.load(open('optimal_simulation.pkl', 'rb'))
 
-
-N_reps = 10
-N_processes = 20
-
-i = 0
-
-for r in range(1,N_reps+1):
-    for p in range(N_processes):
-        res = pickle.load(open(f'optimisation results/multiple simulations/Simulation {r} from process {p}.pkl', 'rb'))
-        if p == 0 and r == 1:
-            Nt_fast = len(res['fast'])
-            Nt_slow = len(res['slow'])
-            fast_simulations = np.zeros((N_reps*N_processes, Nt_fast))
-            slow_simulations = np.zeros((N_reps*N_processes, Nt_slow))
-            avg_fast = np.zeros((N_reps,Nt_fast))
-            avg_slow = np.zeros((N_reps,Nt_slow))
-            
-        fast_simulations[i,:] = res['fast']
-        slow_simulations[i,:] = res['slow']
-        i += 1
-
-sim_fast = np.mean(fast_simulations, axis=0)
-sim_slow = np.mean(slow_simulations, axis=0)
-std_fast = np.std(fast_simulations, axis=0)
-std_slow = np.std(slow_simulations, axis=0)
-
-
+sim_fast = np.mean(res['fast simulation'], axis=0)
+sim_slow = np.mean(res['slow simulation'], axis = 0)
+std_fast = np.std(res['fast simulation'], axis=0)
+std_slow = np.std(res['slow simulation'], axis=0)
 
 data_to_save = [df['Time (s)'],
                 pd.Series(sim_fast[:cutoff_fast], name = 'fast average'),
@@ -96,13 +73,13 @@ ax1.fill_between(df['Time (s)'], sim_slow-std_slow, sim_slow+std_slow, color= 'w
 ax1.plot(df['Time (s)'], sim_slow, color='blue', linestyle='--', lw = 1, label = 'slow responders (sim)',zorder=2)
 
 ax1.legend(fontsize=font_small)
-ax1.set_xlabel('time [s]', fontsize=font_mid)
+ax1.set_xlabel('time [min]', fontsize=font_mid)
 ax1.set_ylabel('fluorescence intensity [AU]', fontsize=font_mid)
 ax1.set_xlim([0,600])
 ax1.set_ylim([0,550])
 ax1.spines['top'].set_visible(False)
 ax1.spines['right'].set_visible(False)
-ax1.set_xticks(np.arange(0,601,120),np.arange(0,601,120),fontsize=font_small)
+ax1.set_xticks(np.arange(0,601,120),np.arange(0,11,2),fontsize=font_small)
 ax1.set_yticks(np.arange(0,600,100),np.arange(0,600,100),fontsize=font_small)
 ax1.legend(handles=[
             plt.Line2D([], [], color='black', label='experiment'),
