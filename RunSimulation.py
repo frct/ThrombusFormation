@@ -153,6 +153,8 @@ def RunSimulation(
         Ny = 64,
         INJURY_LENGTH = 50,
         T = 60,
+        N_PLATELETS = 20,
+        MARGINATION_LAYER = 10,
         MAX_NUMBER_NEW_PLATELETS_PER_SECOND = 100,
         BINDING_TIME_SEC = 0.05,
         MAX_ACTIVATION = 1,
@@ -187,7 +189,17 @@ def RunSimulation(
     
     activation = np.zeros((Ny,Nx))
     activation[1, INJURY_START:INJURY_END] = MAX_ACTIVATION
+    
+    platelets = []
+    y_range = list(range(1, 1+MARGINATION_LAYER)) + list(range(Ny-MARGINATION_LAYER, Ny))
+    while len(platelets) < N_PLATELETS:
+        x = np.random.randint(0,Nx)
+        y = np.random.choice(y_range)
+        if [x,y] not in platelets:
+            platelets.append([x, y])
 
+    
+    
 ##############################################################################    
     # EXTRACT DEPENDENT VARIABLES
     
