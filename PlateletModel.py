@@ -7,6 +7,38 @@ Created on Mon Oct  9 13:18:43 2023
 
 import numpy as np
 
+''' ###########################################################################
+
+PLATELET MOVEMENT
+
+###########################################################################'''
+
+def DriftPlatelets(platelets, ux, uy, l, h, Δt, σ):
+    
+    new_pos = []
+    for [x,y] in platelets:
+        u = ux[int(y), int(x)]
+        v = uy[int(y), int(x)]
+        
+        ϵ_x, ϵ_y = np.random.normal(0, σ, size=2)
+        
+        # !!! have to make sure platelets don't enter thrombus
+        
+        x += u * Δt + ϵ_x
+        y += v * Δt + ϵ_y
+            
+        if x > l-1:
+            x = 0
+            y = np.random.randint(1,h)
+        elif x < 0:
+            x = l + x
+        if y > h-1:
+            y = (h-1) - (y-(h-1))
+        if y < 1:
+            y = 1 + (1-y)
+        
+        new_pos.append([x,y])
+    return new_pos
 
 ''' ###########################################################################
 
@@ -41,7 +73,8 @@ def GetBindingPoints(density, stickiness):
             )
         )
     
-    true_indices = np.argwhere(could_bind) + 1 # because could_bind is defined only between 1:-1 rows and 1:-1 columns we have to increment by 1 to get indices in original array
+    # create a set for fast matching
+    true_indices = set(map(tuple,np.argwhere(could_bind) + 1)) # because could_bind is defined only between 1:-1 rows and 1:-1 columns we have to increment by 1 to get indices in original array
     
     return true_indices, could_bind
 
@@ -155,22 +188,47 @@ def plateletFill(density, cRow, cCol, platelet_density, activation):
     
     return new_density
 
-def BindPlatelets(stickiness, density, platelet_density, ux=None, uy=None, u_ref=None, flow_dependence=False):
+# def BindPlatelets(stickiness, density, platelet_density, ux=None, uy=None, u_ref=None, flow_dependence=False):
+#     ''' Given a chosen definition of stickiness, goes through the process of 
+#     picking a random binding point and randomly binding a platelet'''
+    
+#     did_bind = 0
+#     new_density = density.copy()
+    
+#     true_indices, _ = GetBindingPoints(density, stickiness)
+    
+#     if len(true_indices) > 0:
+#         i,j = true_indices[np.random.randint(len(true_indices))]
+#         p_bind = GetBindingProbability(i, j, stickiness, ux, uy,  u_ref, flow_dependence)
+        
+#         if np.random.rand() < p_bind:
+#             did_bind = 1
+#             new_density = plateletFill(density, i, j, platelet_density, stickiness)
+            
+#     return new_density, did_bind
+
+def BindPlatelets(stickiness, density, platelets, platelet_density, ux=None, uy=None, u_ref=None, flow_dependence=False):
     ''' Given a chosen definition of stickiness, goes through the process of 
     picking a random binding point and randomly binding a platelet'''
     
     did_bind = 0
     new_density = density.copy()
     
-    true_indices, _ = GetBindingPoints(density, stickiness)
+    binding_layer, _ = GetBindingPoints(density, stickiness)
     
-    if len(true_indices) > 0:
-        i,j = true_indices[np.random.randint(len(true_indices))]
+    # floor platelet coordinates and flip to i,j format to compare with binding_layer
+    floored_platelets = set([(int(y), int(x)) for x,y in platelets])
+    
+    true_indices = list(floored_platelets & binding_layer)
+    
+    for i,j in true_indices:
         p_bind = GetBindingProbability(i, j, stickiness, ux, uy,  u_ref, flow_dependence)
         
         if np.random.rand() < p_bind:
             did_bind = 1
             new_density = plateletFill(density, i, j, platelet_density, stickiness)
+        
+        # !!! don't forget to remove the platelet from the platelet list
             
     return new_density, did_bind
     

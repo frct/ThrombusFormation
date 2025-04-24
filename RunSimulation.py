@@ -10,7 +10,7 @@ import numpy as np
 from tqdm import tqdm
 from PlateletModel import BindPlatelets, DetachPlatelets, RemoveUntethered, \
     SigmoidActivation, InstantaneousActivation, FixedActivation, \
-    GetBindingProbability, GetDetachProbability
+    GetBindingProbability, GetDetachProbability, DriftPlatelets
 from LBM_functions import InitialiseLBM, UpdateLBM
 import pickle
 from scipy.optimize import fsolve
@@ -155,7 +155,6 @@ def RunSimulation(
         T = 60,
         N_PLATELETS = 20,
         MARGINATION_LAYER = 10,
-        MAX_NUMBER_NEW_PLATELETS_PER_SECOND = 100,
         BINDING_TIME_SEC = 0.05,
         MAX_ACTIVATION = 1,
         EPSILON_ACTIVATION = 0.001,
@@ -167,6 +166,7 @@ def RunSimulation(
         PLATELET_DENSITY = 0.3,
         core_threshold = 0.7,
         core_density = 0.7,
+        CFL = 0.8,
         fps = 15,
         gif_duration = 10):
 
@@ -196,23 +196,71 @@ def RunSimulation(
         x = np.random.randint(0,Nx)
         y = np.random.choice(y_range)
         if [x,y] not in platelets:
-            platelets.append([x, y])
+            platelets.append([x, y])    
 
+        
+###############################################################################
+    # LBM SETUP
     
     
+    # LBM PARAMETERS
+    
+    Δx_USI = 1e-6 # lattice unit (lu) size in m
+    C_ρ = 1000 # conversion factor for ρ in kg/m3
+    ρ_USI = 1060 # kg/m3
+    LENGTH_USI = Nx * Δx_USI # m
+    HEIGHT_USI = (Ny-2) * Δx_USI # m
+    RADIUS_USI = HEIGHT_USI / 2 # m
+    γ_USI = 1000 # s-1
+    U_MAX_USI = γ_USI * RADIUS_USI / 2 # m/s
+    μ_USI = 4e-3 # extrapolation from Cherry 2013 and lab calculation for in vitro experiments
+    NU_USI = μ_USI / ρ_USI
+    τ = 0.809 # dimensionless characteristic relaxation time, must be bigger than 0.5, ideal value = 0.809
+
+    # INITIALISE LBM
+    
+    CELERITY_OF_SOUND_LBM, U_MAX_LBM, NU_LBM, Δt_LBM, ρ0, dP_dx, F, ρ, ux_old, uy_old = InitialiseLBM(Nx, Ny, Δx_USI, τ, NU_USI, ρ_USI, U_MAX_USI, C_ρ)
+    
+    if want_core:
+        initial_save_name = 'Initial flow over core.pkl'
+    else:
+        initial_save_name = 'Initial flow.pkl'
+    
+    try:
+        print('Loading previous save of first frame')
+        F, ux, uy, vel, ρ = pickle.load(open(initial_save_name, 'rb'))
+    except:
+        print('Loading failed, calculating from scratch')
+        F = np.einsum('ijk,ij->ijk', F, porosity)
+        F, ux, uy, vel, ρ, _ = UpdateLBM(porosity, F, ρ0, τ, dP_dx, CELERITY_OF_SOUND_LBM, N_convergence=100, is_print=False)      
+        pickle.dump([F, ux, uy, vel, ρ], open(initial_save_name, 'wb'))
+        
+    # extract attachment and detachment rates
+    if flow_dependence:
+        thrombus = np.zeros((Ny,Nx))
+        thrombus[1:-1,:] = (density[1:-1] > 0).astype(int)
+        INITIAL_STICKINESS = MAX_ACTIVATION * thrombus
+        if u_ref_bind is None:
+            u_ref_bind = np.mean(vel[2,INJURY_START:INJURY_END])
+        β = 0.01 # GetBeta(BINDING_TIME_SEC, Δt, INITIAL_STICKINESS, ux, uy, u_ref=u_ref_bind, INJURY_START=INJURY_START, INJURY_END=INJURY_END)
+        
+
+
 ##############################################################################    
     # EXTRACT DEPENDENT VARIABLES
     
-    Δt = 1 / MAX_NUMBER_NEW_PLATELETS_PER_SECOND # time steps in s
-    Nt = int(T / Δt) + 1
+    kB = 1.38e-23
+    Temp = 310
+    R = 10e-12#9
     
-    if constant_binding: # stickiness depends only on the presence of a platelet
-        INITIAL_STICKINESS = 1
-    else: # stickiness depends on activation level
-        INITIAL_STICKINESS = MAX_ACTIVATION
+    Δt = CFL / np.max(np.sqrt(ux**2 + uy**2)) * Δt_LBM # timestep in s
+    Nt = int(T / Δt) + 1
+    D = kB * Temp / (6 * np.pi * μ_USI * R)
+    σ_diffusion = np.sqrt(2 * D * Δt / Δx_USI**2)
+
     
     if not flow_dependence:  
-        β = GetBeta(BINDING_TIME_SEC, Δt, INITIAL_STICKINESS)
+        β = 0.01 #GetBeta(BINDING_TIME_SEC, Δt, INITIAL_STICKINESS)
     
     if DETACHMENT_TIME_SEC == np.inf:
         P_DETACH_MAX = 0
@@ -220,7 +268,7 @@ def RunSimulation(
     elif flow_dependence:
         P_DETACH_MAX = GetFlowDpdntPDetach(DETACHMENT_TIME_SEC, Δt, density, activation, u_ref=u_ref_detach)
     else:
-        P_DETACH_MAX = GetPDetach(DETACHMENT_TIME_SEC, Δt)
+        P_DETACH_MAX = 0.01 #GetPDetach(DETACHMENT_TIME_SEC, Δt)
         ρ = None
         
     
@@ -229,57 +277,6 @@ def RunSimulation(
         # ACTIVATION_RATE does not need to be calibrated w.r.t Δt as Δt and HALF_ACTIVATION_SEC are in the same unit
     else:
         ACTIVATION_RATE = None
-        
-###############################################################################
-    # LBM SETUP
-    
-    if flow_dependence or want_flow:
-    
-        # LBM PARAMETERS
-        
-        Δx_USI = 1e-6 # lattice unit (lu) size in m
-        C_ρ = 1000 # conversion factor for ρ in kg/m3
-        ρ_USI = 1060 # kg/m3
-        LENGTH_USI = Nx * Δx_USI # m
-        HEIGHT_USI = (Ny-2) * Δx_USI # m
-        RADIUS_USI = HEIGHT_USI / 2 # m
-        γ_USI = 1000 # s-1
-        U_MAX_USI = γ_USI * RADIUS_USI / 2 # m/s
-        μ_USI = 4e-3 # extrapolation from Cherry 2013 and lab calculation for in vitro experiments
-        NU_USI = μ_USI / ρ_USI
-        τ = 0.809 # dimensionless characteristic relaxation time, must be bigger than 0.5, ideal value = 0.809
-
-        # INITIALISE LBM
-        
-        CELERITY_OF_SOUND_LBM, U_MAX_LBM, NU_LBM, Δt_LBM, ρ0, dP_dx, F, ρ, ux_old, uy_old = InitialiseLBM(Nx, Ny, Δx_USI, τ, NU_USI, ρ_USI, U_MAX_USI, C_ρ)
-        
-        if want_core:
-            initial_save_name = 'Initial flow over core.pkl'
-        else:
-            initial_save_name = 'Initial flow.pkl'
-        
-        try:
-            print('Loading previous save of first frame')
-            F, ux, uy, vel, ρ = pickle.load(open(initial_save_name, 'rb'))
-        except:
-            print('Loading failed, calculating from scratch')
-            F = np.einsum('ijk,ij->ijk', F, porosity)
-            F, ux, uy, vel, ρ, _ = UpdateLBM(porosity, F, ρ0, τ, dP_dx, CELERITY_OF_SOUND_LBM, N_convergence=100, is_print=False)      
-            pickle.dump([F, ux, uy, vel, ρ], open(initial_save_name, 'wb'))
-            
-        # extract attachment and detachment rates
-        if flow_dependence:
-            thrombus = np.zeros((Ny,Nx))
-            thrombus[1:-1,:] = (density[1:-1] > 0).astype(int)
-            INITIAL_STICKINESS = INITIAL_STICKINESS * thrombus
-            if u_ref_bind is None:
-                u_ref_bind = np.mean(vel[2,INJURY_START:INJURY_END])
-            β = GetBeta(BINDING_TIME_SEC, Δt, INITIAL_STICKINESS, ux, uy, u_ref=u_ref_bind, INJURY_START=INJURY_START, INJURY_END=INJURY_END)
-            
-    else:
-        ux = None
-        uy = None
-
 
 ###############################################################################
     # INITIALISE FRAMES
@@ -320,6 +317,8 @@ def RunSimulation(
         
         clot_size[t] = np.sum(density[1:-1,:]>0) - INJURY_LENGTH
         
+        platelets = DriftPlatelets(platelets, ux, uy, Nx-1, Ny-1, Δt/Δt_LBM, σ_diffusion)
+        
         if want_core:
             core_size[t] = np.sum(density[1:-1,:]==core_density) - INJURY_LENGTH
         
@@ -358,7 +357,7 @@ def RunSimulation(
         ''' BindPlatelets and DetachPlatelets use the same former copy of density 
         to avoid sequence effects'''
         
-        density_post_attachment, binding_events[t] = BindPlatelets(stickiness, density, PLATELET_DENSITY, ux, uy, u_ref_bind, flow_dependence)        
+        density_post_attachment, binding_events[t] = BindPlatelets(stickiness, density,  platelets, PLATELET_DENSITY, ux, uy, u_ref_bind, flow_dependence)        
         density_post_detachment, detachment_events[t] = DetachPlatelets(density, density_post_attachment, PLATELET_DENSITY, activation, P_DETACH_MAX, MAX_ACTIVATION, ux, uy, u_ref_detach, flow_dependence, constant_detachment, ρ)
         new_density, n_removed = RemoveUntethered(density_post_detachment, INJURY_START, INJURY_END)    
         detachment_events[t] += n_removed
@@ -444,4 +443,4 @@ def RunSimulation(
     return save_content
     
 if __name__ == '__main__':
-    RunSimulation(T=20, BINDING_TIME_SEC=0.02, DETACHMENT_TIME_SEC=1, want_frames=False, want_flow=True, activation_dependent_binding = False)
+    RunSimulation(T=20, BINDING_TIME_SEC=0.02, DETACHMENT_TIME_SEC=1, want_frames=False, want_flow=True)
