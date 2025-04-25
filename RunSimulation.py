@@ -266,9 +266,9 @@ def RunSimulation(
         P_DETACH_MAX = 0
         ρ = None
     elif flow_dependence:
-        P_DETACH_MAX = GetFlowDpdntPDetach(DETACHMENT_TIME_SEC, Δt, density, activation, u_ref=u_ref_detach)
+        P_DETACH_MAX = 0 #GetFlowDpdntPDetach(DETACHMENT_TIME_SEC, Δt, density, activation, u_ref=u_ref_detach)
     else:
-        P_DETACH_MAX = 0.01 #GetPDetach(DETACHMENT_TIME_SEC, Δt)
+        P_DETACH_MAX = 0 #GetPDetach(DETACHMENT_TIME_SEC, Δt)
         ρ = None
         
     
@@ -357,7 +357,7 @@ def RunSimulation(
         ''' BindPlatelets and DetachPlatelets use the same former copy of density 
         to avoid sequence effects'''
         
-        density_post_attachment, binding_events[t] = BindPlatelets(stickiness, density,  platelets, PLATELET_DENSITY, ux, uy, u_ref_bind, flow_dependence)        
+        density_post_attachment, binding_events[t], platelets = BindPlatelets(stickiness, density,  platelets, PLATELET_DENSITY, ux, uy, u_ref_bind, flow_dependence)        
         density_post_detachment, detachment_events[t] = DetachPlatelets(density, density_post_attachment, PLATELET_DENSITY, activation, P_DETACH_MAX, MAX_ACTIVATION, ux, uy, u_ref_detach, flow_dependence, constant_detachment, ρ)
         new_density, n_removed = RemoveUntethered(density_post_detachment, INJURY_START, INJURY_END)    
         detachment_events[t] += n_removed
@@ -412,7 +412,8 @@ def RunSimulation(
     'detachment_events': detachment_events,
     'final density': density,
     'final activation': activation,
-    'environmental activation': final_activation is None
+    'environmental activation': final_activation is None,
+    'free platelets': platelets
     }
     
     if want_core:
@@ -443,4 +444,4 @@ def RunSimulation(
     return save_content
     
 if __name__ == '__main__':
-    RunSimulation(T=20, BINDING_TIME_SEC=0.02, DETACHMENT_TIME_SEC=1, want_frames=False, want_flow=True)
+    res = RunSimulation(T=10, BINDING_TIME_SEC=0.02, DETACHMENT_TIME_SEC=1, want_frames=False, want_flow=True)

@@ -188,49 +188,34 @@ def plateletFill(density, cRow, cCol, platelet_density, activation):
     
     return new_density
 
-# def BindPlatelets(stickiness, density, platelet_density, ux=None, uy=None, u_ref=None, flow_dependence=False):
-#     ''' Given a chosen definition of stickiness, goes through the process of 
-#     picking a random binding point and randomly binding a platelet'''
-    
-#     did_bind = 0
-#     new_density = density.copy()
-    
-#     true_indices, _ = GetBindingPoints(density, stickiness)
-    
-#     if len(true_indices) > 0:
-#         i,j = true_indices[np.random.randint(len(true_indices))]
-#         p_bind = GetBindingProbability(i, j, stickiness, ux, uy,  u_ref, flow_dependence)
-        
-#         if np.random.rand() < p_bind:
-#             did_bind = 1
-#             new_density = plateletFill(density, i, j, platelet_density, stickiness)
-            
-#     return new_density, did_bind
-
 def BindPlatelets(stickiness, density, platelets, platelet_density, ux=None, uy=None, u_ref=None, flow_dependence=False):
     ''' Given a chosen definition of stickiness, goes through the process of 
     picking a random binding point and randomly binding a platelet'''
     
-    did_bind = 0
+    n_binds = 0
     new_density = density.copy()
     
     binding_layer, _ = GetBindingPoints(density, stickiness)
     
-    # floor platelet coordinates and flip to i,j format to compare with binding_layer
-    floored_platelets = set([(int(y), int(x)) for x,y in platelets])
+    # floor platelet coordinates, flip to i,j format to compare with binding_layer, and store index 
+    floored_platelets = [(i, (int(y), int(x))) for i, (x,y) in enumerate(platelets)]
     
-    true_indices = list(floored_platelets & binding_layer)
+    true_indices = [(i, f) for i, f in floored_platelets if f in binding_layer]
     
-    for i,j in true_indices:
+    to_remove = []
+    
+    for idx,f in true_indices:
+        i, j = f
         p_bind = GetBindingProbability(i, j, stickiness, ux, uy,  u_ref, flow_dependence)
         
         if np.random.rand() < p_bind:
-            did_bind = 1
+            n_binds += 1
             new_density = plateletFill(density, i, j, platelet_density, stickiness)
-        
-        # !!! don't forget to remove the platelet from the platelet list
+            to_remove.append(idx)
+    
+    platelets = [p for i, p in enumerate(platelets) if i not in to_remove]
             
-    return new_density, did_bind
+    return new_density, n_binds, platelets
     
 ''' ###########################################################################
 
