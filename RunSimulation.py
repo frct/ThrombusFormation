@@ -153,7 +153,7 @@ def RunSimulation(
         Ny = 64,
         INJURY_LENGTH = 50,
         T = 60,
-        N_PLATELETS = 20,
+        PLATELET_COUNT = 200000, # per microL => 200.10^12 /m3
         MARGINATION_LAYER = 10,
         BINDING_TIME_SEC = 0.05,
         MAX_ACTIVATION = 1,
@@ -190,13 +190,7 @@ def RunSimulation(
     activation = np.zeros((Ny,Nx))
     activation[1, INJURY_START:INJURY_END] = MAX_ACTIVATION
     
-    platelets = []
-    y_range = list(range(1, 1+MARGINATION_LAYER)) + list(range(Ny-MARGINATION_LAYER, Ny))
-    while len(platelets) < N_PLATELETS:
-        x = np.random.randint(0,Nx)
-        y = np.random.choice(y_range)
-        if [x,y] not in platelets:
-            platelets.append([x, y])    
+     
 
         
 ###############################################################################
@@ -249,13 +243,24 @@ def RunSimulation(
 ##############################################################################    
     # EXTRACT DEPENDENT VARIABLES
     
+    PLATELET_COUNT_USI = PLATELET_COUNT * 10**9 # e.g. 200,000 plts/microL => 200.10^12 plts/m3
+    N_PLATELETS = int(PLATELET_COUNT_USI * np.pi * RADIUS_USI**2 * LENGTH_USI)
+    
+    platelets = []
+    y_range = list(range(1, 1+MARGINATION_LAYER)) + list(range(Ny-MARGINATION_LAYER, Ny))
+    while len(platelets) < N_PLATELETS:
+        x = np.random.randint(0,Nx)
+        y = np.random.choice(y_range)
+        if [x,y] not in platelets:
+            platelets.append([x, y])   
+    
     kB = 1.38e-23
     Temp = 310
     R = 10e-12#9
     
     Δt = CFL / np.max(np.sqrt(ux**2 + uy**2)) * Δt_LBM # timestep in s
     Nt = int(T / Δt) + 1
-    D = kB * Temp / (6 * np.pi * μ_USI * R)
+    D = kB * Temp / (6 * np.pi * μ_USI * R) # !!! check real value in Bark
     σ_diffusion = np.sqrt(2 * D * Δt / Δx_USI**2)
 
     
