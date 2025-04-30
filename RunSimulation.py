@@ -154,7 +154,7 @@ def RunSimulation(
         INJURY_LENGTH = 50,
         T = 60,
         PLATELET_COUNT = 200000, # per microL => 200.10^12 /m3
-        MARGINATION_LAYER = 10,
+        MARGINATION_LAYER = None,
         BINDING_TIME_SEC = 0.05,
         MAX_ACTIVATION = 1,
         EPSILON_ACTIVATION = 0.001,
@@ -247,7 +247,12 @@ def RunSimulation(
     N_PLATELETS = int(PLATELET_COUNT_USI * np.pi * RADIUS_USI**2 * LENGTH_USI)
     
     platelets = []
-    y_range = list(range(1, 1+MARGINATION_LAYER)) + list(range(Ny-MARGINATION_LAYER, Ny))
+    
+    if MARGINATION_LAYER is None:
+        y_range = np.arange(1,Ny-1)
+    else:
+        y_range = list(range(1, 1+MARGINATION_LAYER)) + list(range(Ny-MARGINATION_LAYER, Ny))
+
     while len(platelets) < N_PLATELETS:
         x = np.random.randint(0,Nx)
         y = np.random.choice(y_range)
