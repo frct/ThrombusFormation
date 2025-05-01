@@ -10,7 +10,7 @@ import numpy as np
 from tqdm import tqdm
 from PlateletModel import BindPlatelets, DetachPlatelets, RemoveUntethered, \
     SigmoidActivation, InstantaneousActivation, FixedActivation, \
-    GetBindingProbability, GetDetachProbability, DriftPlatelets
+    GetBindingProbability, GetDetachProbability, NewDriftPlatelets
 from LBM_functions import InitialiseLBM, UpdateLBM
 import pickle
 from scipy.optimize import fsolve
@@ -258,6 +258,7 @@ def RunSimulation(
         y = np.random.choice(y_range)
         if [x,y] not in platelets:
             platelets.append([x, y])   
+
     
     kB = 1.38e-23
     Temp = 310
@@ -270,7 +271,7 @@ def RunSimulation(
 
     
     if not flow_dependence:  
-        β = 0.01 #GetBeta(BINDING_TIME_SEC, Δt, INITIAL_STICKINESS)
+        β = 0 #.01 #GetBeta(BINDING_TIME_SEC, Δt, INITIAL_STICKINESS)
     
     if DETACHMENT_TIME_SEC == np.inf:
         P_DETACH_MAX = 0
@@ -327,7 +328,16 @@ def RunSimulation(
         
         clot_size[t] = np.sum(density[1:-1,:]>0) - INJURY_LENGTH
         
-        platelets = DriftPlatelets(platelets, ux, uy, Nx-1, Ny-1, Δt/Δt_LBM, σ_diffusion)
+        platelets = NewDriftPlatelets(platelets, ux, uy, density, Δt/Δt_LBM, σ_diffusion)
+        
+        avg_inflow = np.sum(ux[1:-1,0]) * Δx_USI / Δt_LBM / (Ny-2)
+        Q_sec = avg_inflow * np.pi * RADIUS_USI**2 * PLATELET_COUNT_USI
+        Q = Q_sec * Δt # average rate of incoming platelets per timestep
+        
+        n_new_platelets = np.random.poisson(Q)
+        
+        for _ in range(n_new_platelets):
+            platelets.append([0, np.random.choice(y_range)])
         
         if want_core:
             core_size[t] = np.sum(density[1:-1,:]==core_density) - INJURY_LENGTH

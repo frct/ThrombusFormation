@@ -22,7 +22,7 @@ TUNABLE PARAMETERS
 
 
 # choose zoom which must be an integer, fyi original grid spacing is 1um
-scale = 1
+scale = 10
 # choose CFL which will determine the ts
 CFL = 0.8
 
@@ -70,7 +70,7 @@ Cs, LBM_umax, nu, Δt_LBM, ρ0, dP_dx, F, ρ, ux, uy = InitialiseLBM(Nx, Ny, Δx
 
 
 F = np.einsum('ijk,ij->ijk', F, porosity)
-F, ux, uy, vel, ρ, *_ = UpdateLBM(porosity, F, ρ0, τ, dP_dx, Cs, N_convergence=1000)
+F, ux, uy, vel, ρ, *_ = UpdateLBM(porosity, F, ρ0, τ, dP_dx, Cs, N_convergence=100)
 
 '''###########################################################################
 
@@ -85,13 +85,13 @@ particles = [[0, j] for j in range(1,Ny)]
 Δt = CFL / np.max(np.sqrt(ux**2 + uy**2)) * Δt_LBM
 Nt = int(T / Δt)
 
-trajectories = [np.array((2,len(particles))) for _ in range(Nt)]
+trajectories = np.zeros((len(particles),2,Nt))
 
 D = kB * Temp / (6 * np.pi * μ_USI * particle_R)
 σ_diffusion = np.sqrt(2 * D * Δt / Δx_USI**2)
 
 for t in range(Nt):
-    trajectories[t] = particles
+    trajectories[:,:,t] = particles
     particles = DriftPlatelets(particles, ux, uy, Nx-1, Ny-1, Δt/Δt_LBM, σ_diffusion)
     
-pickle.dump({'trajectories':trajectories, 'scale':scale, 'CFL': CFL}, open(f'trajectories for scale = {scale} and CFL = {CFL}.pkl', 'wb'))
+pickle.dump({'trajectories':trajectories, 'scale':scale, 'CFL': CFL, 'σ_diffusion': σ_diffusion}, open(f'trajectories for scale = {scale} and CFL = {CFL}.pkl', 'wb'))

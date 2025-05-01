@@ -7,6 +7,7 @@ Created on Mon Oct  9 13:18:43 2023
 
 import numpy as np
 
+
 ''' ###########################################################################
 
 PLATELET MOVEMENT
@@ -39,6 +40,60 @@ def DriftPlatelets(platelets, ux, uy, l, h, Δt, σ):
         
         new_pos.append([x,y])
     return new_pos
+
+def MovePlatelet(x, y, new_x, new_y, density):
+    xi, yi = int(x), int(y)
+    new_xi, new_yi = int(new_x), int(new_y)
+    
+    # Check if destination cell is occupied
+    if density[new_yi, new_xi] == 0:
+        return new_x, new_y  # move freely
+        
+    # Check side steps
+    can_move_y = density[new_yi, xi] == 0
+    can_move_x = density[yi, new_xi] == 0
+
+    if can_move_y and can_move_x:
+        # Randomly pick between the two allowed directions
+        if np.random.rand() < 0.5:
+            return new_x, y  # move only in x
+        else:
+            return x, new_y  # move only in y
+    elif can_move_y:
+        return x, new_y
+    elif can_move_x:
+        return new_x, y
+    else:
+        return x, y  # stay in place
+
+   
+def NewDriftPlatelets(platelets, ux, uy, density, Δt, σ):
+    
+    Ny, Nx = np.shape(density)
+    
+    new_pos = []
+    for i, [x,y] in enumerate(platelets):
+        
+        u = ux[int(y), int(x)]
+        v = uy[int(y), int(x)]
+        
+        ϵ_x, ϵ_y = np.random.normal(0, σ, size=2)
+        
+        new_x = x + u * Δt + ϵ_x
+        new_y = y + v * Δt + ϵ_y
+        
+        if new_x > Nx or new_x < 0: # if the platelet has moved out of the domain, forget it
+            continue
+        
+        if new_y > Ny - 1: # bounce-back against the vessel walls
+            new_y = (Ny-1) - (new_y-(Ny-1))
+        if new_y < 1:
+            new_y = 1 + (1-new_y)
+        
+        x, y = MovePlatelet(x, y, new_x, new_y, density)     
+        new_pos.append([x,y])
+    return new_pos
+        
 
 ''' ###########################################################################
 
