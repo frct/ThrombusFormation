@@ -22,9 +22,9 @@ TUNABLE PARAMETERS
 
 
 # choose zoom which must be an integer, fyi original grid spacing is 1um
-scale = 1
+scale = 5
 # choose CFL which will determine the ts
-CFL = 0.3
+CFL = 0.8
 
 T = 1
 particle_R = 1e-6 # radius of particles which will determine diffusivity
@@ -68,9 +68,12 @@ NU_USI = μ_USI / ρ_USI
 
 Cs, LBM_umax, nu, Δt_LBM, ρ0, dP_dx, F, ρ, ux, uy = InitialiseLBM(Nx, Ny, Δx_USI, τ, NU_USI, ρ_USI, U_MAX_USI, C_ρ)
 
-
-F = np.einsum('ijk,ij->ijk', F, porosity)
-F, ux, uy, vel, ρ, *_ = UpdateLBM(porosity, F, ρ0, τ, dP_dx, Cs, N_convergence=100)
+try:
+    [ux,uy] = pickle.load(open(f'Velocity field for scale = {scale}.pkl', 'rb'))
+except:        
+    F = np.einsum('ijk,ij->ijk', F, porosity)
+    F, ux, uy, vel, ρ, *_ = UpdateLBM(porosity, F, ρ0, τ, dP_dx, Cs, N_convergence=100)
+    pickle.dump([ux,uy], open(f'Velocity field for scale = {scale}.pkl', 'wb'))
 
 '''###########################################################################
 

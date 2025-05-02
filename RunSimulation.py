@@ -153,8 +153,8 @@ def RunSimulation(
         Ny = 64,
         INJURY_LENGTH = 50,
         T = 60,
-        PLATELET_COUNT = 200000, # per microL => 200.10^12 /m3
-        MARGINATION_LAYER = None,
+        PLATELET_RATE = 0.015, # probability that any incoming cell contains a platelet, around 1%
+        MARGINATION_LAYER = 10,
         BINDING_TIME_SEC = 0.05,
         MAX_ACTIVATION = 1,
         EPSILON_ACTIVATION = 0.001,
@@ -243,12 +243,13 @@ def RunSimulation(
 ##############################################################################    
     # EXTRACT DEPENDENT VARIABLES
     
-    PLATELET_COUNT_USI = PLATELET_COUNT * 10**9 # e.g. 200,000 plts/microL => 200.10^12 plts/m3
-    N_PLATELETS = int(PLATELET_COUNT_USI * np.pi * RADIUS_USI**2 * LENGTH_USI)
-    PLATELET_RATIO = N_PLATELETS / (Nx * (Ny-2)) # proportion of cells occupied by a platelet
-    PLATELET_COUNT_USI = N_PLATELETS / (HEIGHT_USI * LENGTH_USI * Δx_USI)
-    new_N_PLATELETS = int(PLATELET_COUNT_USI * HEIGHT_USI * LENGTH_USI * Δx_USI)
+    # PLATELET_COUNT_USI = PLATELET_COUNT * 10**9 # e.g. 200,000 plts/microL => 200.10^12 plts/m3
+    # N_PLATELETS = int(PLATELET_COUNT_USI * np.pi * RADIUS_USI**2 * LENGTH_USI)
+    # PLATELET_RATIO = N_PLATELETS / (Nx * (Ny-2) - INJURY_LENGTH) # proportion of cells occupied by a platelet
+    # PLATELET_COUNT_USI = N_PLATELETS / (HEIGHT_USI * LENGTH_USI * Δx_USI)
+    # new_N_PLATELETS = int(PLATELET_COUNT_USI * HEIGHT_USI * LENGTH_USI * Δx_USI)
     
+    N_PLATELETS = 154
     platelets = []
     
     if MARGINATION_LAYER is None:
@@ -270,11 +271,11 @@ def RunSimulation(
     Δt = CFL / np.max(np.sqrt(ux**2 + uy**2)) * Δt_LBM # timestep in s
     Nt = int(T / Δt) + 1
     D = kB * Temp / (6 * np.pi * μ_USI * R) # !!! check real value in Bark
-    σ_diffusion = np.sqrt(2 * D * Δt / Δx_USI**2)
+    σ_diffusion = 0 #np.sqrt(2 * D * Δt / Δx_USI**2)
 
     
     if not flow_dependence:  
-        β = 0 #.01 #GetBeta(BINDING_TIME_SEC, Δt, INITIAL_STICKINESS)
+        β = 0 #0.01 #GetBeta(BINDING_TIME_SEC, Δt, INITIAL_STICKINESS)
     
     if DETACHMENT_TIME_SEC == np.inf:
         P_DETACH_MAX = 0
@@ -338,14 +339,20 @@ def RunSimulation(
         avg_inflow = np.sum(ux[1:-1,0]) * Δx_USI / Δt_LBM / (Ny-2)
         #Δt_rep = Δx / avg_inflow # the average amount of time it takes to shift one cell
         #Q = PLATELET_RATIO * avg_inflow * Δt / Δx_USI
-        #Q_sec = avg_inflow * np.pi * RADIUS_USI**2 * PLATELET_COUNT_USI
-        Q_sec = avg_inflow * PLATELET_COUNT_USI * HEIGHT_USI * Δx_USI
-        Q = Q_sec * Δt # average rate of incoming platelets per timestep
+        # Q_sec = avg_inflow * np.pi * RADIUS_USI**2 * PLATELET_COUNT_USI
+        # Q_sec = avg_inflow * PLATELET_COUNT_USI * HEIGHT_USI * Δx_USI
+        # Q = Q_sec * Δt # average rate of incoming platelets per timestep
         
-        inflow_per_cell = ux[1:-1,0] * Δx_USI / Δt_LBM
-        Q_per_cell = inflow_per_cell * Δt / Δx_USI * PLATELET_RATIO
+        cell_inflow = int(np.sum(ux[y_range,0]) / Δt_LBM * Δt) + 1 # in one ts, how many new cells have entered the domain
+
         
-        n_new_platelets = np.random.poisson(Q)
+        # inflow_per_cell = ux[1:-1,0] * Δx_USI / Δt_LBM
+        # Q_per_cell = inflow_per_cell * Δt / Δx_USI * PLATELET_RATIO
+        
+        n_new_platelets = np.random.binomial(n=cell_inflow, p=PLATELET_RATE) 
+        
+        # N_PLATELETS = PLATELET_RATIO * (Nx * (Ny-2) - INJURY_LENGTH - clot_size[t])
+        # n_new_platelets = int(N_PLATELETS) - len(platelets) 
         
         for _ in range(n_new_platelets):
             platelets.append([0, np.random.choice(y_range)])
