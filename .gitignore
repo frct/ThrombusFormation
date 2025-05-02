@@ -1,0 +1,4 @@
+# Ignore all .pkl files except for saved simulation
+
+*.pkl
+!saved simulation.pkl
