@@ -22,9 +22,9 @@ TUNABLE PARAMETERS
 
 
 # choose zoom which must be an integer, fyi original grid spacing is 1um
-scale = 10
+scale = 1
 # choose CFL which will determine the ts
-CFL = 0.8
+CFL = 0.3
 
 T = 1
 particle_R = 1e-6 # radius of particles which will determine diffusivity

@@ -245,6 +245,9 @@ def RunSimulation(
     
     PLATELET_COUNT_USI = PLATELET_COUNT * 10**9 # e.g. 200,000 plts/microL => 200.10^12 plts/m3
     N_PLATELETS = int(PLATELET_COUNT_USI * np.pi * RADIUS_USI**2 * LENGTH_USI)
+    PLATELET_RATIO = N_PLATELETS / (Nx * (Ny-2)) # proportion of cells occupied by a platelet
+    PLATELET_COUNT_USI = N_PLATELETS / (HEIGHT_USI * LENGTH_USI * Δx_USI)
+    new_N_PLATELETS = int(PLATELET_COUNT_USI * HEIGHT_USI * LENGTH_USI * Δx_USI)
     
     platelets = []
     
@@ -321,7 +324,9 @@ def RunSimulation(
 
     if want_core:
         core_size = np.zeros((Nt))
-
+        
+    platelet_count = np.zeros((Nt))
+    
     for t in tqdm(range(Nt)):
         
         # SNAPSHOT OF CURRENT STATE
@@ -331,13 +336,21 @@ def RunSimulation(
         platelets = NewDriftPlatelets(platelets, ux, uy, density, Δt/Δt_LBM, σ_diffusion)
         
         avg_inflow = np.sum(ux[1:-1,0]) * Δx_USI / Δt_LBM / (Ny-2)
-        Q_sec = avg_inflow * np.pi * RADIUS_USI**2 * PLATELET_COUNT_USI
+        #Δt_rep = Δx / avg_inflow # the average amount of time it takes to shift one cell
+        #Q = PLATELET_RATIO * avg_inflow * Δt / Δx_USI
+        #Q_sec = avg_inflow * np.pi * RADIUS_USI**2 * PLATELET_COUNT_USI
+        Q_sec = avg_inflow * PLATELET_COUNT_USI * HEIGHT_USI * Δx_USI
         Q = Q_sec * Δt # average rate of incoming platelets per timestep
+        
+        inflow_per_cell = ux[1:-1,0] * Δx_USI / Δt_LBM
+        Q_per_cell = inflow_per_cell * Δt / Δx_USI * PLATELET_RATIO
         
         n_new_platelets = np.random.poisson(Q)
         
         for _ in range(n_new_platelets):
             platelets.append([0, np.random.choice(y_range)])
+        
+        platelet_count[t] = len(platelets)
         
         if want_core:
             core_size[t] = np.sum(density[1:-1,:]==core_density) - INJURY_LENGTH
@@ -433,7 +446,8 @@ def RunSimulation(
     'final density': density,
     'final activation': activation,
     'environmental activation': final_activation is None,
-    'free platelets': platelets
+    'free platelets': platelets,
+    'platelet count': platelet_count
     }
     
     if want_core:

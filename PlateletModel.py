@@ -41,7 +41,7 @@ def DriftPlatelets(platelets, ux, uy, l, h, Δt, σ):
         new_pos.append([x,y])
     return new_pos
 
-def MovePlatelet(x, y, new_x, new_y, density):
+def MovePlatelet(x, y, new_x, new_y, density, ux, uy):
     xi, yi = int(x), int(y)
     new_xi, new_yi = int(new_x), int(new_y)
     
@@ -54,8 +54,12 @@ def MovePlatelet(x, y, new_x, new_y, density):
     can_move_x = density[yi, new_xi] == 0
 
     if can_move_y and can_move_x:
-        # Randomly pick between the two allowed directions
-        if np.random.rand() < 0.5:
+        # Pick between the two allowed directions based on the relative ratio
+        # of corresponding velocity components in the starting cell
+        # i.e. the bigger ux is compared to uy, the more likely the platelet
+        # moves in x direction
+        prob_move_x = abs(ux[yi,xi]) / (abs(ux[yi,xi]) + abs(uy[yi,xi])) 
+        if np.random.rand() < prob_move_x:
             return new_x, y  # move only in x
         else:
             return x, new_y  # move only in y
@@ -90,7 +94,7 @@ def NewDriftPlatelets(platelets, ux, uy, density, Δt, σ):
         if new_y < 1:
             new_y = 1 + (1-new_y)
         
-        x, y = MovePlatelet(x, y, new_x, new_y, density)     
+        x, y = MovePlatelet(x, y, new_x, new_y, density, ux, uy)     
         new_pos.append([x,y])
     return new_pos
         
