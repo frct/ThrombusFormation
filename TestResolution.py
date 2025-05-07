@@ -9,10 +9,13 @@ a vessel with a thrombus in the middle
 """
 
 import numpy as np
-import mpi4py as mpi
+from mpi4py import MPI
 import pickle
 from LBM_functions import InitialiseLBM, UpdateLBM
 from PlateletModel import DriftPlatelets
+
+# comm = MPI.COMM_WORLD
+# rank = comm.Get_rank()
 
 '''###########################################################################
 
@@ -22,7 +25,7 @@ TUNABLE PARAMETERS
 
 
 # choose zoom which must be an integer, fyi original grid spacing is 1um
-scale = 5
+scale = 1
 # choose CFL which will determine the ts
 CFL = 0.8
 
@@ -30,6 +33,7 @@ T = 1
 particle_R = 1e-6 # radius of particles which will determine diffusivity
 kB = 1.38e-23
 Temp = 310
+N_reps = 1000
 
 
 '''###########################################################################
@@ -81,20 +85,21 @@ ADD PARTICLES AND TRACK TRAJECTORY
 
 ############################################################################'''
 
+y_start = 9.5 # 1.5 + rank
 
-particles = [[0, j] for j in range(1,Ny)]
-
-  
 Δt = CFL / np.max(np.sqrt(ux**2 + uy**2)) * Δt_LBM
 Nt = int(T / Δt)
-
-trajectories = np.zeros((len(particles),2,Nt))
-
 D = kB * Temp / (6 * np.pi * μ_USI * particle_R)
 σ_diffusion = np.sqrt(2 * D * Δt / Δx_USI**2)
 
-for t in range(Nt):
-    trajectories[:,:,t] = particles
-    particles = DriftPlatelets(particles, ux, uy, Nx-1, Ny-1, Δt/Δt_LBM, σ_diffusion)
+trajectories = np.zeros((N_reps,2,Nt))
+
+for repeat in range(N_reps):
+    print(f'Rep {repeat}')
+    particle = [[Nx//4, y_start]]
+
+    for t in range(Nt):
+        trajectories[repeat,:,t] = particle[0]
+        particle = DriftPlatelets(particle, ux, uy, Nx-1, Ny-1, Δt/Δt_LBM, σ_diffusion)
     
-pickle.dump({'trajectories':trajectories, 'scale':scale, 'CFL': CFL, 'σ_diffusion': σ_diffusion}, open(f'trajectories for scale = {scale} and CFL = {CFL}.pkl', 'wb'))
+pickle.dump({'trajectories':trajectories, 'scale':scale, 'CFL': CFL, 'σ_diffusion': σ_diffusion, 'D': D}, open(f'trajectories at y = {y_start} for scale = {scale} and CFL = {CFL}.pkl', 'wb'))
