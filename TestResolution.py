@@ -25,15 +25,15 @@ TUNABLE PARAMETERS
 
 
 # choose zoom which must be an integer, fyi original grid spacing is 1um
-scale = 1
+scale = 10
 # choose CFL which will determine the ts
-CFL = 0.8
+CFL = 0.2
 
 T = 1
 particle_R = 1e-6 # radius of particles which will determine diffusivity
 kB = 1.38e-23
 Temp = 310
-N_reps = 1000
+N_reps = 100
 
 
 '''###########################################################################
@@ -102,4 +102,4 @@ for repeat in range(N_reps):
         trajectories[repeat,:,t] = particle[0]
         particle = DriftPlatelets(particle, ux, uy, Nx-1, Ny-1, Δt/Δt_LBM, σ_diffusion)
     
-pickle.dump({'trajectories':trajectories, 'scale':scale, 'CFL': CFL, 'σ_diffusion': σ_diffusion, 'D': D}, open(f'trajectories at y = {y_start} for scale = {scale} and CFL = {CFL}.pkl', 'wb'))
+pickle.dump({'trajectories':trajectories, 'scale':scale, 'CFL': CFL, 'σ_diffusion': σ_diffusion, 'D': D}, open(f'y = {int(y_start)} scale = {scale} CFL = {CFL}.pkl', 'wb'))
