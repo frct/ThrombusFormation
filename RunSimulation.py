@@ -153,9 +153,10 @@ def RunSimulation(
         Ny = 64,
         INJURY_LENGTH = 50,
         T = 60,
-        PLATELET_RATE = 0.015, # probability that any incoming cell contains a platelet, around 1%
+        PLATELET_COUNT = 200000, # in platelets/microL
         MARGINATION_LAYER = 10,
         BINDING_TIME_SEC = 0.05,
+        BETA = 0.01,
         MAX_ACTIVATION = 1,
         EPSILON_ACTIVATION = 0.001,
         HALF_ACTIVATION_SEC = 1,
@@ -236,20 +237,17 @@ def RunSimulation(
         INITIAL_STICKINESS = MAX_ACTIVATION * thrombus
         if u_ref_bind is None:
             u_ref_bind = np.mean(vel[2,INJURY_START:INJURY_END])
-        β = 0.01 # GetBeta(BINDING_TIME_SEC, Δt, INITIAL_STICKINESS, ux, uy, u_ref=u_ref_bind, INJURY_START=INJURY_START, INJURY_END=INJURY_END)
+        β = 0.1 # GetBeta(BINDING_TIME_SEC, Δt, INITIAL_STICKINESS, ux, uy, u_ref=u_ref_bind, INJURY_START=INJURY_START, INJURY_END=INJURY_END)
         
 
 
 ##############################################################################    
     # EXTRACT DEPENDENT VARIABLES
     
-    # PLATELET_COUNT_USI = PLATELET_COUNT * 10**9 # e.g. 200,000 plts/microL => 200.10^12 plts/m3
-    # N_PLATELETS = int(PLATELET_COUNT_USI * np.pi * RADIUS_USI**2 * LENGTH_USI)
-    # PLATELET_RATIO = N_PLATELETS / (Nx * (Ny-2) - INJURY_LENGTH) # proportion of cells occupied by a platelet
-    # PLATELET_COUNT_USI = N_PLATELETS / (HEIGHT_USI * LENGTH_USI * Δx_USI)
-    # new_N_PLATELETS = int(PLATELET_COUNT_USI * HEIGHT_USI * LENGTH_USI * Δx_USI)
-    
-    N_PLATELETS = 154
+    PLATELET_COUNT_USI = PLATELET_COUNT * 10**9 # e.g. 200,000 plts/microL => 200.10^12 plts/m3
+    N_PLATELETS = int(PLATELET_COUNT_USI * np.pi * RADIUS_USI**2 * LENGTH_USI)
+    PLATELET_RATIO = N_PLATELETS / (Nx * (Ny-2) - INJURY_LENGTH) # proportion of cells occupied by a platelet
+
     platelets = []
     
     if MARGINATION_LAYER is None:
@@ -271,11 +269,11 @@ def RunSimulation(
     Δt = CFL / np.max(np.sqrt(ux**2 + uy**2)) * Δt_LBM # timestep in s
     Nt = int(T / Δt) + 1
     D = kB * Temp / (6 * np.pi * μ_USI * R) # !!! check real value in Bark
-    σ_diffusion = 0 #np.sqrt(2 * D * Δt / Δx_USI**2)
+    σ_diffusion = np.sqrt(2 * D * Δt / Δx_USI**2)
 
     
     if not flow_dependence:  
-        β = 0 #0.01 #GetBeta(BINDING_TIME_SEC, Δt, INITIAL_STICKINESS)
+        β = BETA #GetBeta(BINDING_TIME_SEC, Δt, INITIAL_STICKINESS)
     
     if DETACHMENT_TIME_SEC == np.inf:
         P_DETACH_MAX = 0
@@ -336,28 +334,12 @@ def RunSimulation(
         
         platelets = NewDriftPlatelets(platelets, ux, uy, density, Δt/Δt_LBM, σ_diffusion)
         
-        avg_inflow = np.sum(ux[1:-1,0]) * Δx_USI / Δt_LBM / (Ny-2)
-        #Δt_rep = Δx / avg_inflow # the average amount of time it takes to shift one cell
-        #Q = PLATELET_RATIO * avg_inflow * Δt / Δx_USI
-        # Q_sec = avg_inflow * np.pi * RADIUS_USI**2 * PLATELET_COUNT_USI
-        # Q_sec = avg_inflow * PLATELET_COUNT_USI * HEIGHT_USI * Δx_USI
-        # Q = Q_sec * Δt # average rate of incoming platelets per timestep
-        
-        cell_inflow = int(np.sum(ux[y_range,0]) / Δt_LBM * Δt) + 1 # in one ts, how many new cells have entered the domain
-
-        
-        # inflow_per_cell = ux[1:-1,0] * Δx_USI / Δt_LBM
-        # Q_per_cell = inflow_per_cell * Δt / Δx_USI * PLATELET_RATIO
-        
-        n_new_platelets = np.random.binomial(n=cell_inflow, p=PLATELET_RATE) 
-        
-        # N_PLATELETS = PLATELET_RATIO * (Nx * (Ny-2) - INJURY_LENGTH - clot_size[t])
-        # n_new_platelets = int(N_PLATELETS) - len(platelets) 
-        
-        for _ in range(n_new_platelets):
-            platelets.append([0, np.random.choice(y_range)])
-        
         platelet_count[t] = len(platelets)
+        ratio = platelet_count[t] / (Nx * (Ny-2) - INJURY_LENGTH - clot_size[t])
+        
+        if ratio < PLATELET_RATIO:
+            platelets.append([0, np.random.choice(y_range)])       
+        
         
         if want_core:
             core_size[t] = np.sum(density[1:-1,:]==core_density) - INJURY_LENGTH
@@ -485,4 +467,4 @@ def RunSimulation(
     return save_content
     
 if __name__ == '__main__':
-    res = RunSimulation(T=10, BINDING_TIME_SEC=0.02, DETACHMENT_TIME_SEC=1, want_frames=False, want_flow=True)
+    res = RunSimulation(T=10, BETA=0.001, DETACHMENT_TIME_SEC=1, want_frames=False, want_flow=True)

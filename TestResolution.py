@@ -27,7 +27,7 @@ TUNABLE PARAMETERS
 # choose zoom which must be an integer, fyi original grid spacing is 1um
 scale = 10
 # choose CFL which will determine the ts
-CFL = 0.2
+CFL = 0.8
 
 T = 1
 particle_R = 1e-6 # radius of particles which will determine diffusivity
@@ -85,7 +85,7 @@ ADD PARTICLES AND TRACK TRAJECTORY
 
 ############################################################################'''
 
-y_start = 9.5 # 1.5 + rank
+y_start = 9.5
 
 Δt = CFL / np.max(np.sqrt(ux**2 + uy**2)) * Δt_LBM
 Nt = int(T / Δt)
@@ -96,7 +96,7 @@ trajectories = np.zeros((N_reps,2,Nt))
 
 for repeat in range(N_reps):
     print(f'Rep {repeat}')
-    particle = [[Nx//4, y_start]]
+    particle = [[Nx//4, y_start * scale]]
 
     for t in range(Nt):
         trajectories[repeat,:,t] = particle[0]
