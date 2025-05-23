@@ -81,10 +81,14 @@ def NewDriftPlatelets(platelets, ux, uy, density, Δt, σ):
         u = ux[int(y), int(x)]
         v = uy[int(y), int(x)]
         
-        ϵ_x, ϵ_y = np.random.normal(0, σ, size=2)
+        #ϵ_x, ϵ_y = np.random.normal(0, σ, size=2)
+        # new_x = x + u * Δt + ϵ_x
+        # new_y = y + v * Δt + ϵ_y
         
-        new_x = x + u * Δt + ϵ_x
-        new_y = y + v * Δt + ϵ_y
+        ϵ_x, ϵ_y = np.random.normal(0, σ * np.sqrt(u**2 + v**2), size=2)
+        
+        new_x = x + (u + ϵ_x) * Δt
+        new_y = y + (v + ϵ_y) * Δt
         
         if new_x > Nx or new_x < 0: # if the platelet has moved out of the domain, forget it
             continue

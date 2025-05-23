@@ -154,7 +154,7 @@ def RunSimulation(
         INJURY_LENGTH = 50,
         T = 60,
         PLATELET_COUNT = 200000, # in platelets/microL
-        MARGINATION_LAYER = 10,
+        MARGINATION_LAYER = 5,
         BINDING_TIME_SEC = 0.05,
         BETA = 0.01,
         MAX_ACTIVATION = 1,
@@ -264,11 +264,16 @@ def RunSimulation(
     
     kB = 1.38e-23
     Temp = 310
-    R = 10e-12#9
+    R = 1e-6 # 10e-12
     
     Δt = CFL / np.max(np.sqrt(ux**2 + uy**2)) * Δt_LBM # timestep in s
     Nt = int(T / Δt) + 1
     D = kB * Temp / (6 * np.pi * μ_USI * R) # !!! check real value in Bark
+    
+    # !!! add an estimate
+    # !!! alternative mechanism : make diffusion proportional to convection, this should result in margination
+    # !!! save platelet trajectories every ms or so?
+    
     σ_diffusion = np.sqrt(2 * D * Δt / Δx_USI**2)
 
     
@@ -279,9 +284,9 @@ def RunSimulation(
         P_DETACH_MAX = 0
         ρ = None
     elif flow_dependence:
-        P_DETACH_MAX = 0 #GetFlowDpdntPDetach(DETACHMENT_TIME_SEC, Δt, density, activation, u_ref=u_ref_detach)
+        P_DETACH_MAX = GetFlowDpdntPDetach(DETACHMENT_TIME_SEC, Δt, density, activation, u_ref=u_ref_detach)
     else:
-        P_DETACH_MAX = 0 #GetPDetach(DETACHMENT_TIME_SEC, Δt)
+        P_DETACH_MAX = 1e-6 #GetPDetach(DETACHMENT_TIME_SEC, Δt)
         ρ = None
         
     
