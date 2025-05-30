@@ -268,13 +268,9 @@ def RunSimulation(
     
     Δt = CFL / np.max(np.sqrt(ux**2 + uy**2)) * Δt_LBM # timestep in s
     Nt = int(T / Δt) + 1
-    D = kB * Temp / (6 * np.pi * μ_USI * R) # !!! check real value in Bark
+    D = kB * Temp / (6 * np.pi * μ_USI * R)
     
-    # !!! add an estimate
-    # !!! alternative mechanism : make diffusion proportional to convection, this should result in margination
-    # !!! save platelet trajectories every ms or so?
-    
-    σ_diffusion = np.sqrt(2 * D * Δt / Δx_USI**2)
+    σ_diffusion = 0.5 #np.sqrt(2 * D * Δt / Δx_USI**2)
 
     
     if not flow_dependence:  
@@ -330,8 +326,19 @@ def RunSimulation(
         core_size = np.zeros((Nt))
         
     platelet_count = np.zeros((Nt))
+
+    trajectory_save_interval = 0.001
+    n_save = 0
+    next_trajectory_save_time = n_save * trajectory_save_interval
     
     for t in tqdm(range(Nt)):
+        
+        current_time = t * Δt
+        
+        if current_time >= next_trajectory_save_time:            
+            pickle.dump(platelets, open(f'trajectories/no margination/platelet positions at {int(1000 * next_trajectory_save_time)} ms.pkl', 'wb'))
+            n_save += 1
+            next_trajectory_save_time = n_save * trajectory_save_interval
         
         # SNAPSHOT OF CURRENT STATE
         

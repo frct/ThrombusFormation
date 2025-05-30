@@ -2,3 +2,7 @@
 
 *.pkl
 !saved simulation.pkl
+/trajectories
+/grid tests
+/FA
+/CACD

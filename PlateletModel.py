@@ -91,7 +91,9 @@ def NewDriftPlatelets(platelets, ux, uy, density, Δt, σ):
         new_y = y + (v + ϵ_y) * Δt
         
         if new_x > Nx or new_x < 0: # if the platelet has moved out of the domain, forget it
-            continue
+            # !!! platelets looping around
+            new_x = new_x - Nx if new_x > Nx else new_x + Nx
+            #continue
         
         if new_y > Ny - 1: # bounce-back against the vessel walls
             new_y = (Ny-1) - (new_y-(Ny-1))
