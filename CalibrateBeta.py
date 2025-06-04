@@ -12,9 +12,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from RunSimulation import RunSimulation
 
-beta_values = [0.001] # np.arange(0.001, 0.01, 0.001)
+beta_values = [0] #.001] # np.arange(0.001, 0.01, 0.001)
 n_reps = 1
-T = 1
+T = 20
 
 for i, β in enumerate(beta_values):
     for rep in range(n_reps):

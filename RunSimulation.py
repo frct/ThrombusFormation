@@ -245,7 +245,8 @@ def RunSimulation(
     # EXTRACT DEPENDENT VARIABLES
     
     PLATELET_COUNT_USI = PLATELET_COUNT * 10**9 # e.g. 200,000 plts/microL => 200.10^12 plts/m3
-    N_PLATELETS = int(PLATELET_COUNT_USI * np.pi * RADIUS_USI**2 * LENGTH_USI)
+    # !!! change
+    N_PLATELETS = 1500 #int(PLATELET_COUNT_USI * np.pi * RADIUS_USI**2 * LENGTH_USI)
     PLATELET_RATIO = N_PLATELETS / (Nx * (Ny-2) - INJURY_LENGTH) # proportion of cells occupied by a platelet
 
     platelets = []
@@ -331,6 +332,12 @@ def RunSimulation(
     n_save = 0
     next_trajectory_save_time = n_save * trajectory_save_interval
     
+    T_hist = 1
+    N_plt_hist = 2000
+    exit_y = np.zeros((Ny))
+    n_hist = 0
+    next_hist = 0
+    
     for t in tqdm(range(Nt)):
         
         current_time = t * Δt
@@ -339,12 +346,27 @@ def RunSimulation(
             pickle.dump(platelets, open(f'trajectories/no margination/platelet positions at {int(1000 * next_trajectory_save_time)} ms.pkl', 'wb'))
             n_save += 1
             next_trajectory_save_time = n_save * trajectory_save_interval
+
+            
+        if current_time > next_hist and np.sum(exit_y) >= N_plt_hist:
+            pickle.dump({'exit distribution': exit_y,
+                         'record start': next_hist,
+                         'time interval': current_time - next_hist},
+                        open(f'exit distribution {n_hist+1}.pkl', 'wb'))
+            n_hist += 1
+            next_hist = n_hist * T_hist
+            exit_y = np.zeros((Ny))
+            if current_time > next_hist:
+                raise Exception('increase interval between histograms!')
+        
+        if current_time < next_hist:
+            exit_y = np.zeros((Ny))
         
         # SNAPSHOT OF CURRENT STATE
         
         clot_size[t] = np.sum(density[1:-1,:]>0) - INJURY_LENGTH
         
-        platelets = NewDriftPlatelets(platelets, ux, uy, density, Δt/Δt_LBM, σ_diffusion)
+        platelets = NewDriftPlatelets(platelets, ux, uy, density, Δt/Δt_LBM, σ_diffusion, exit_y)
         
         platelet_count[t] = len(platelets)
         ratio = platelet_count[t] / (Nx * (Ny-2) - INJURY_LENGTH - clot_size[t])

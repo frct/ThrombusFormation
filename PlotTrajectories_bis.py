@@ -13,12 +13,14 @@ import numpy as np
 from tqdm import tqdm
 
 
+
 files = os.listdir('trajectories/no margination/')
+n_files = len(files)
 trajectories = []
 
-for file in files:
-    with open(f'trajectories/no margination/{file}', "rb") as f:
-        traj = pickle.load(f)
+for f in range(len(files)):
+    with open(f'trajectories/no margination/platelet positions at {f} ms.pkl', "rb") as file:
+        traj = pickle.load(file)
         trajectories.append(traj)
         
 fig,ax = plt.subplots()
@@ -28,13 +30,14 @@ ax.set_aspect('equal')
 
 num_trajectories = 154
 
+# Get a colormap with enough colors
+cmap = plt.get_cmap('hsv')  # hsv gives a nice range of colors
+colors = [cmap(i / num_trajectories) for i in range(num_trajectories)]
+
 frame_rate = 15
 writer = animation.PillowWriter(fps = frame_rate)
 save_file_name = 'trajectories.gif'
 
-# Get a colormap with enough colors
-cmap = plt.get_cmap('hsv')  # hsv gives a nice range of colors
-colors = [cmap(i / num_trajectories) for i in range(num_trajectories)]
 
 # initialise moving particles
 x = [p[0] for p in trajectories[0]]
@@ -58,7 +61,7 @@ with writer.saving(fig, save_file_name, dpi = 300):
         
         writer.grab_frame()
 
-# # Create plot objects with assigned colors
+# Create plot objects with assigned colors
 # points = [ax.plot([], [], 'o', color=colors[i])[0] for i in range(num_trajectories)]
 
 
