@@ -1,8 +1,10 @@
 # Ignore all .pkl files except for saved simulation
 
+*.gif
 *.pkl
 !saved simulation.pkl
 /trajectories
 /grid tests
 /FA
 /CACD
+/exit distributions
