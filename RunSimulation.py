@@ -14,6 +14,7 @@ from PlateletModel import BindPlatelets, DetachPlatelets, RemoveUntethered, \
 from LBM_functions import InitialiseLBM, UpdateLBM
 import pickle
 from scipy.optimize import fsolve
+from scipy.stats import beta
 
 '''############################################################################
 HELPER FUNCTIONS TO CALIBRATE ATTACHMENT AND DETACHMENT RATES
@@ -154,7 +155,7 @@ def RunSimulation(
         INJURY_LENGTH = 50,
         T = 60,
         PLATELET_COUNT = 200000, # in platelets/microL
-        MARGINATION_LAYER = 5,
+        MARGINATION_LAYER = None,
         BINDING_TIME_SEC = 0.05,
         BETA = 0.01,
         MAX_ACTIVATION = 1,
@@ -214,8 +215,8 @@ def RunSimulation(
 
     # INITIALISE LBM
     
-    CELERITY_OF_SOUND_LBM, U_MAX_LBM, NU_LBM, Δt_LBM, ρ0, dP_dx, F, ρ, ux_old, uy_old = InitialiseLBM(Nx, Ny, Δx_USI, τ, NU_USI, ρ_USI, U_MAX_USI, C_ρ)
-    
+    CELERITY_OF_SOUND_LBM, U_MAX_LBM, NU_LBM, Δt_LBM, ρ0, dP_dx, F, ρ, ux, uy = InitialiseLBM(Nx, Ny, Δx_USI, τ, NU_USI, ρ_USI, U_MAX_USI, C_ρ)
+    vel = np.sqrt(ux**2 + uy**2)
     if want_core:
         initial_save_name = 'Initial flow over core.pkl'
     else:
@@ -245,35 +246,36 @@ def RunSimulation(
     # EXTRACT DEPENDENT VARIABLES
     
     PLATELET_COUNT_USI = PLATELET_COUNT * 10**9 # e.g. 200,000 plts/microL => 200.10^12 plts/m3
-    # !!! change
-    N_PLATELETS = 1500 #int(PLATELET_COUNT_USI * np.pi * RADIUS_USI**2 * LENGTH_USI)
+    N_PLATELETS = int(PLATELET_COUNT_USI * np.pi * RADIUS_USI**2 * LENGTH_USI)
     PLATELET_RATIO = N_PLATELETS / (Nx * (Ny-2) - INJURY_LENGTH) # proportion of cells occupied by a platelet
-
-    platelets = []
+    
     
     if MARGINATION_LAYER is None:
-        y_range = np.arange(1,Ny-1)
+        shape_param = 0.34
+        Y = 1 + 1e-10 + beta.rvs(a=shape_param, b=shape_param, size=N_PLATELETS) * (Ny-2-2e-10)
+        X = np.random.uniform(0, Nx, N_PLATELETS)        
+        platelets = [[x, y] for x,y in zip(X,Y)]
     else:
+        platelets = []
         y_range = list(range(1, 1+MARGINATION_LAYER)) + list(range(Ny-MARGINATION_LAYER, Ny))
 
-    while len(platelets) < N_PLATELETS:
-        x = np.random.randint(0,Nx)
-        y = np.random.choice(y_range)
-        if [x,y] not in platelets:
-            platelets.append([x, y])   
-
+        while len(platelets) < N_PLATELETS:
+            x = np.random.randint(0,Nx)
+            y = np.random.choice(y_range)
+            if [x,y] not in platelets:
+                platelets.append([x, y])   
+                
     
-    kB = 1.38e-23
-    Temp = 310
-    R = 1e-6 # 10e-12
+    # kB = 1.38e-23
+    # Temp = 310
+    # R = 1e-6 # 10e-12
+    # D = kB * Temp / (6 * np.pi * μ_USI * R)
     
     Δt = CFL / np.max(np.sqrt(ux**2 + uy**2)) * Δt_LBM # timestep in s
     Nt = int(T / Δt) + 1
-    D = kB * Temp / (6 * np.pi * μ_USI * R)
     
-    σ_diffusion = 0.5 #np.sqrt(2 * D * Δt / Δx_USI**2)
-
-    
+    σ_diffusion = 0.05 #np.sqrt(2 * D * Δt / Δx_USI**2)
+   
     if not flow_dependence:  
         β = BETA #GetBeta(BINDING_TIME_SEC, Δt, INITIAL_STICKINESS)
     
@@ -327,52 +329,46 @@ def RunSimulation(
         core_size = np.zeros((Nt))
         
     platelet_count = np.zeros((Nt))
-
+    
     trajectory_save_interval = 0.001
     n_save = 0
     next_trajectory_save_time = n_save * trajectory_save_interval
     
-    T_hist = 1
-    N_plt_hist = 2000
-    exit_y = np.zeros((Ny))
-    n_hist = 0
-    next_hist = 0
     
     for t in tqdm(range(Nt)):
         
         current_time = t * Δt
         
-        if current_time >= next_trajectory_save_time:            
-            pickle.dump(platelets, open(f'trajectories/no margination/platelet positions at {int(1000 * next_trajectory_save_time)} ms.pkl', 'wb'))
-            n_save += 1
-            next_trajectory_save_time = n_save * trajectory_save_interval
+        # if current_time >= next_trajectory_save_time:            
+        #     pickle.dump([platelets, density, activation, current_time], open(f'trajectories/platelet positions {int(n_save)}.pkl', 'wb'))
+        #     n_save += 1
+        #     next_trajectory_save_time = n_save * trajectory_save_interval
 
-            
-        if current_time > next_hist and np.sum(exit_y) >= N_plt_hist:
-            pickle.dump({'exit distribution': exit_y,
-                         'record start': next_hist,
-                         'time interval': current_time - next_hist},
-                        open(f'exit distribution {n_hist+1}.pkl', 'wb'))
-            n_hist += 1
-            next_hist = n_hist * T_hist
-            exit_y = np.zeros((Ny))
-            if current_time > next_hist:
-                raise Exception('increase interval between histograms!')
-        
-        if current_time < next_hist:
-            exit_y = np.zeros((Ny))
         
         # SNAPSHOT OF CURRENT STATE
         
         clot_size[t] = np.sum(density[1:-1,:]>0) - INJURY_LENGTH
         
-        platelets = NewDriftPlatelets(platelets, ux, uy, density, Δt/Δt_LBM, σ_diffusion, exit_y)
+        platelets = NewDriftPlatelets(platelets, ux, uy, density, Δt/Δt_LBM, σ_diffusion)
         
         platelet_count[t] = len(platelets)
         ratio = platelet_count[t] / (Nx * (Ny-2) - INJURY_LENGTH - clot_size[t])
         
         if ratio < PLATELET_RATIO:
-            platelets.append([0, np.random.choice(y_range)])       
+            if MARGINATION_LAYER is None:
+                # use rejection sampling to sample from distribution proportional
+                # to beta * ux
+                Y = None
+                while Y is None:
+                    proposed_Y = 1 + 1e-10 + beta.rvs(a=shape_param, b=shape_param) * (Ny-2-2e-10)
+                    v = ux[int(proposed_Y),0]
+                    accept_prob = v / np.max(ux[1:-1, 0])
+                    if np.random.rand() < accept_prob:
+                        Y = proposed_Y
+                    
+                platelets.append([0, Y])
+            else:
+                platelets.append([0, np.random.choice(y_range)])    
         
         
         if want_core:
@@ -418,6 +414,9 @@ def RunSimulation(
         new_density, n_removed = RemoveUntethered(density_post_detachment, INJURY_START, INJURY_END)    
         detachment_events[t] += n_removed
         
+        # remove platelets that have become stuck in the thrombus
+        platelets = [p for p in platelets if density[int(p[1]), int(p[0])] == 0]
+        
         if final_activation is None: # in this case, the final activation depends on surrounding activation
             if ACTIVATION_RATE is None: # activation jumps instantaneously to successive final activation levels
                 activation = InstantaneousActivation(activation, new_density, MAX_ACTIVATION, ACTIVATION_LOSS)
@@ -426,8 +425,8 @@ def RunSimulation(
         else:
             activation = FixedActivation(activation, new_density, MAX_ACTIVATION, final_activation, Δt, ACTIVATION_RATE, EPSILON_ACTIVATION, ACTIVATION_LOSS)
         
-        if np.any(activation[1,INJURY_START:INJURY_END] != 1):
-            break
+        # if np.any(activation[1,INJURY_START:INJURY_END] != 1):
+        #     break
         
         if want_core:
             new_density[activation>core_threshold] = core_density

@@ -1,5 +1,6 @@
 # Ignore all .pkl files except for saved simulation
 
+*.png
 *.gif
 *.pkl
 !saved simulation.pkl

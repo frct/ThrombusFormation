@@ -11,70 +11,54 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import numpy as np
 from tqdm import tqdm
+from matplotlib.colors import ListedColormap
 
 
-
-files = os.listdir('trajectories/no margination/')
-n_files = len(files)
-trajectories = []
-
-for f in range(len(files)):
-    with open(f'trajectories/no margination/platelet positions at {f} ms.pkl', "rb") as file:
-        traj = pickle.load(file)
-        trajectories.append(traj)
         
-fig,ax = plt.subplots()
+fig,ax = plt.subplots(figsize=(18,5))
 ax.set_xlim(0,256)
 ax.set_ylim(0,64)
 ax.set_aspect('equal')
 
-num_trajectories = 154
+vessel_walls = np.zeros((64,256))
+vessel_walls[0,:] = 1
+vessel_walls[-1,:] = 1
+vessel_walls[0,103:153] = 2 # injury patch
 
-# Get a colormap with enough colors
-cmap = plt.get_cmap('hsv')  # hsv gives a nice range of colors
-colors = [cmap(i / num_trajectories) for i in range(num_trajectories)]
+custom_colors = ['white', 'tan', 'orange']  # Colors corresponding to values 1 and 2
+custom_cmap = ListedColormap(custom_colors)
+
 
 frame_rate = 15
 writer = animation.PillowWriter(fps = frame_rate)
-save_file_name = 'trajectories.gif'
-
-
-# initialise moving particles
-x = [p[0] for p in trajectories[0]]
-y = [p[1] for p in trajectories[0]]
-scatter = ax.scatter(x,y, s=1, c='black')
+save_file_name = 'trajectories with strong binding.gif'
 
 
 
 with writer.saving(fig, save_file_name, dpi = 300):
 
+    vessel_walls_cm = ax.imshow(vessel_walls, cmap=custom_cmap, extent=[0, 256, 0, 64], origin='lower')   
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.spines['left'].set_visible(False)
         
+    for frame in tqdm(np.arange(400,601)):
         
-    for frame in tqdm(range(len(trajectories))):
+        with open(f'trajectories/platelet positions {frame}.pkl', "rb") as file:
+            [platelets, density, activation, t] = pickle.load(file)
+        
         ax.set_title(f'frame {frame}', fontsize=18, loc='right')
-        scatter.remove()    
-        x = [p[0] for p in trajectories[frame]]
-        y = [p[1] for p in trajectories[frame]]
+          
+        x = [p[0] for p in platelets]
+        y = [p[1] for p in platelets]
         scatter = ax.scatter(x,y,s=1,c='black')
+        
+        mask = (activation == 0) | (vessel_walls > 0)
+        Z = np.ma.masked_where(mask, activation)
+        cs = ax.imshow(-1*Z, origin ='lower', cmap = plt.cm.cividis, vmin =-1, vmax = 0, extent=[0, 256, 0, 64])
         ax.set_aspect('equal')
-        
-        
+    
         writer.grab_frame()
-
-# Create plot objects with assigned colors
-# points = [ax.plot([], [], 'o', color=colors[i])[0] for i in range(num_trajectories)]
-
-
-
-# def init():
-#     update(0)
-#     return points
-
-# def update(frame):
-#     for i, [x,y] in enumerate(trajectories[frame]):
-#         points[i].set_data(x, y)
-#     return points
-
-# ani = animation.FuncAnimation(fig, update, frames=len(trajectories), init_func=init, blit=False, interval=200, repeat=False)
-
-# plt.show()
+        
+        scatter.remove()  

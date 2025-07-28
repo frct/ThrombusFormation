@@ -71,7 +71,7 @@ def MovePlatelet(x, y, new_x, new_y, density, ux, uy):
         return x, y  # stay in place
 
    
-def NewDriftPlatelets(platelets, ux, uy, density, Δt, σ, exit_y = None):
+def NewDriftPlatelets(platelets, ux, uy, density, Δt, σ):
     
     Ny, Nx = np.shape(density)
     
@@ -95,12 +95,14 @@ def NewDriftPlatelets(platelets, ux, uy, density, Δt, σ, exit_y = None):
         if new_y < 1:
             new_y = 1 + (1-new_y)
         
-        if new_x > Nx:
-           new_x = new_x - Nx 
-           exit_y[int(new_y)] += 1
+        if new_x > Nx: # forget platelet which move out of the domain
+            continue
+            #new_x = new_x - Nx 
+            
         
         if new_x < 0:
-            new_x = new_x + Nx
+            continue
+            #new_x = new_x + Nx
         
         
         x, y = MovePlatelet(x, y, new_x, new_y, density, ux, uy)     

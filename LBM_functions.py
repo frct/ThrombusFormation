@@ -91,7 +91,7 @@ def UpdateLBM(porosity, F, ρ0, τ, dP_dx, CELERITY_OF_SOUND_LBM, N_convergence=
 
 
     ρ, _, ux, uy = ExtractMacro(F)
-    vel = np.sqrt(ux**2, uy**2)
+    vel = np.sqrt(ux**2 + uy**2)
       
     t = 0    
     
