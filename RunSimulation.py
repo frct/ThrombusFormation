@@ -17,74 +17,48 @@ from scipy.optimize import fsolve
 from scipy.stats import beta
 
 '''############################################################################
-HELPER FUNCTIONS TO CALIBRATE ATTACHMENT AND DETACHMENT RATES
+HELPER FUNCTIONS TO CALIBRATE DETACHMENT RATE
 ############################################################################'''
 
-def GetBeta(binding_time_sec = 0.05,
-            Δt = 0.01,
-            initial_stickiness = 1, 
-            ux=None,
-            uy=None,
-            u_ref=None,
-            INJURY_START=103,
-            INJURY_END=153
-            ):
+# def GetExpectedDetachmentTime(p, Δt):
+#     N_timesteps = int(10 / Δt)
+#     p_onepiece = np.zeros(N_timesteps)
+#     p_twopiece = np.zeros(N_timesteps)
+#     for t in range(1,N_timesteps):
+#         p_onepiece[t] = (1-p)**(t-1) * p/3
+#         if t>1:
+#             p_twopiece[t] = (t-1) * 2/3 * p**2 * (1-p) ** (t-2)
+#     p_detach = p_onepiece + p_twopiece
+#     ExpectedWait = np.sum(np.arange(N_timesteps) * p_detach) * Δt
     
-    if u_ref is None: # simple flow independent model, solve analytically
-        binding_time = binding_time_sec / Δt
-        lambda_val = 1 / binding_time
-        
-        # Define the equation as a Python function
-        def equation_to_solve(β, lambda_val):
-            p_i = β * initial_stickiness 
-            return 1 - (1 - p_i) * (1 - p_i / np.sqrt(2))**2 - lambda_val
-    
-        solution = fsolve(equation_to_solve, x0=0.0, args=(lambda_val,))
-        β = solution[0]
-        
-    else: # compute binding probability over top surface for different test values and interpolate to get desired value
-        test_β = np.arange(0.1,0.001,-0.001) # in reverse order because numpy interpolate expects xp to be increasing and expected binding time is a decreasing function of beta
-        average_binding_rate = np.zeros(len(test_β))
-
-        for i,β in enumerate(test_β):
-            stickiness = β * initial_stickiness
-            binding_probabilities = [GetBindingProbability(2, i, stickiness, ux, uy, u_ref=u_ref, flow_dependence=True) for i in range(INJURY_START, INJURY_END)]
-            average_binding_rate[i] = np.mean(binding_probabilities)
-
-        expected_binding_time = 1 / average_binding_rate * Δt
-        
-        if binding_time_sec > max(expected_binding_time) or binding_time_sec < min(expected_binding_time):
-            raise Exception('Binding time not appropriate for interpolation')
-        β = np.interp(binding_time_sec,expected_binding_time,test_β)
-        
-    return β
-
+#     return ExpectedWait
 
 def GetExpectedDetachmentTime(p, Δt):
-    N_timesteps = 10001
-    p_onepiece = np.zeros(N_timesteps)
-    p_twopiece = np.zeros(N_timesteps)
-    for t in range(1,N_timesteps):
-        p_onepiece[t] = (1-p)**(t-1) * p/3
-        if t>1:
-            p_twopiece[t] = (t-1) * 2/3 * p**2 * (1-p) ** (t-2)
-        p_detach = p_onepiece + p_twopiece
-    ExpectedWait = np.sum(np.arange(N_timesteps) * p_detach) * Δt
-    
+    N_timesteps = int(10 / Δt)
+    t = np.arange(1, N_timesteps)  # start from 1
+
+    # Vectorized one-piece and two-piece probabilities
+    p_onepiece = (1 - p) ** (t - 1) * p / 3
+    p_twopiece = np.zeros_like(p_onepiece)
+    p_twopiece[1:] = (t[1:] - 1) * (2/3) * p**2 * (1 - p) ** (t[1:] - 2)
+
+    p_detach = p_onepiece + p_twopiece
+    ExpectedWait = np.sum(t * p_detach) * Δt
+
     return ExpectedWait
 
 def GetPDetach(DETACHMENT_TIME_SEC, Δt, run_test=False):
     
     try:
-        [time, p] = pickle.load(open('pd=f(detachment_time)', 'rb'))
+        [time, p] = pickle.load(open('pd=f(detachment_time).pkl', 'rb'))
     except:
-        test_values = np.linspace(0.0001, 1, 1000)               
+        test_values = np.linspace(1e-9, 1e-6, 1000)               
         Expected_wait = np.zeros(len(test_values))        
         for i,p in enumerate(test_values):
             Expected_wait[i] = GetExpectedDetachmentTime(p, Δt)
         time = Expected_wait[::-1]
         p = test_values[::-1]           
-        pickle.dump([time,p], open('pd=f(detachment_time)', 'wb'))
+        pickle.dump([time,p], open('pd=f(detachment_time).pkl', 'wb'))
 
     if DETACHMENT_TIME_SEC > time[-1] or DETACHMENT_TIME_SEC < time[0]:
         raise Exception('Detachment time not appropriate for interpolation')
@@ -149,14 +123,13 @@ def RunSimulation(
         flow_dependence=False,
         want_flow=False,
         want_frames = False,
+        want_trajectory = False,
         want_core = False,
         Nx = 256,
         Ny = 64,
         INJURY_LENGTH = 50,
         T = 60,
         PLATELET_COUNT = 200000, # in platelets/microL
-        MARGINATION_LAYER = None,
-        BINDING_TIME_SEC = 0.05,
         BETA = 0.01,
         MAX_ACTIVATION = 1,
         EPSILON_ACTIVATION = 0.001,
@@ -164,7 +137,7 @@ def RunSimulation(
         ACTIVATION_LOSS = 1,
         DETACHMENT_TIME_SEC = np.inf,
         u_ref_bind = None,
-        u_ref_detach = 2e-4, #2e-4
+        u_ref_detach = 2e-4,
         PLATELET_DENSITY = 0.3,
         core_threshold = 0.7,
         core_density = 0.7,
@@ -187,14 +160,10 @@ def RunSimulation(
     else:
         density[1,INJURY_START:INJURY_END] = PLATELET_DENSITY
     porosity = 1 - density
-    previous_density = density.copy()
     
     activation = np.zeros((Ny,Nx))
     activation[1, INJURY_START:INJURY_END] = MAX_ACTIVATION
-    
-     
-
-        
+            
 ###############################################################################
     # LBM SETUP
     
@@ -231,39 +200,23 @@ def RunSimulation(
         F, ux, uy, vel, ρ, _ = UpdateLBM(porosity, F, ρ0, τ, dP_dx, CELERITY_OF_SOUND_LBM, N_convergence=100, is_print=False)      
         pickle.dump([F, ux, uy, vel, ρ], open(initial_save_name, 'wb'))
         
-    # extract attachment and detachment rates
-    if flow_dependence:
-        thrombus = np.zeros((Ny,Nx))
-        thrombus[1:-1,:] = (density[1:-1] > 0).astype(int)
-        INITIAL_STICKINESS = MAX_ACTIVATION * thrombus
-        if u_ref_bind is None:
-            u_ref_bind = np.mean(vel[2,INJURY_START:INJURY_END])
-        β = 0.1 # GetBeta(BINDING_TIME_SEC, Δt, INITIAL_STICKINESS, ux, uy, u_ref=u_ref_bind, INJURY_START=INJURY_START, INJURY_END=INJURY_END)
-        
-
 
 ##############################################################################    
     # EXTRACT DEPENDENT VARIABLES
     
     PLATELET_COUNT_USI = PLATELET_COUNT * 10**9 # e.g. 200,000 plts/microL => 200.10^12 plts/m3
-    N_PLATELETS = int(PLATELET_COUNT_USI * np.pi * RADIUS_USI**2 * LENGTH_USI)
+    N_PLATELETS = int(PLATELET_COUNT_USI * np.pi * RADIUS_USI**2 * LENGTH_USI) # N = Concentration x Volume
     PLATELET_RATIO = N_PLATELETS / (Nx * (Ny-2) - INJURY_LENGTH) # proportion of cells occupied by a platelet
     
     
-    if MARGINATION_LAYER is None:
-        shape_param = 0.34
-        Y = 1 + 1e-10 + beta.rvs(a=shape_param, b=shape_param, size=N_PLATELETS) * (Ny-2-2e-10)
-        X = np.random.uniform(0, Nx, N_PLATELETS)        
-        platelets = [[x, y] for x,y in zip(X,Y)]
-    else:
-        platelets = []
-        y_range = list(range(1, 1+MARGINATION_LAYER)) + list(range(Ny-MARGINATION_LAYER, Ny))
-
-        while len(platelets) < N_PLATELETS:
-            x = np.random.randint(0,Nx)
-            y = np.random.choice(y_range)
-            if [x,y] not in platelets:
-                platelets.append([x, y])   
+    
+    # INITIALISE PLATELET POSITIONS
+    
+    shape_param = 0.34
+    Y = 1 + 1e-10 + beta.rvs(a=shape_param, b=shape_param, size=N_PLATELETS) * (Ny-2-2e-10)
+    X = np.random.uniform(0, Nx, N_PLATELETS)        
+    platelets = [[x, y] for x,y in zip(X,Y)]
+ 
                 
     
     # kB = 1.38e-23
@@ -276,8 +229,6 @@ def RunSimulation(
     
     σ_diffusion = 0.05 #np.sqrt(2 * D * Δt / Δx_USI**2)
    
-    if not flow_dependence:  
-        β = BETA #GetBeta(BINDING_TIME_SEC, Δt, INITIAL_STICKINESS)
     
     if DETACHMENT_TIME_SEC == np.inf:
         P_DETACH_MAX = 0
@@ -285,7 +236,7 @@ def RunSimulation(
     elif flow_dependence:
         P_DETACH_MAX = GetFlowDpdntPDetach(DETACHMENT_TIME_SEC, Δt, density, activation, u_ref=u_ref_detach)
     else:
-        P_DETACH_MAX = 1e-6 #GetPDetach(DETACHMENT_TIME_SEC, Δt)
+        P_DETACH_MAX = GetPDetach(DETACHMENT_TIME_SEC, Δt)
         ρ = None
         
     
@@ -308,12 +259,6 @@ def RunSimulation(
         Δt_frame = T / (N_frames-1)
         frame_times = iter([Δt_frame * i for i in range(N_frames+1)])
         
-        density_frames = np.zeros(density.shape + (N_frames,)) 
-        activation_frames = np.zeros(density.shape + (N_frames,))
-        if want_flow:
-            ux_frames = np.zeros(density.shape + (N_frames,))
-            uy_frames = np.zeros(density.shape + (N_frames,))
-        
         save_time = next(frame_times)
         frame = 0
         
@@ -330,19 +275,21 @@ def RunSimulation(
         
     platelet_count = np.zeros((Nt))
     
-    trajectory_save_interval = 0.001
-    n_save = 0
-    next_trajectory_save_time = n_save * trajectory_save_interval
+    if want_trajectory:
+        trajectory_save_interval = 0.001
+        n_save = 0
+        next_trajectory_save_time = n_save * trajectory_save_interval
     
+    last_save = 0
     
     for t in tqdm(range(Nt)):
         
         current_time = t * Δt
         
-        # if current_time >= next_trajectory_save_time:            
-        #     pickle.dump([platelets, density, activation, current_time], open(f'trajectories/platelet positions {int(n_save)}.pkl', 'wb'))
-        #     n_save += 1
-        #     next_trajectory_save_time = n_save * trajectory_save_interval
+        if want_trajectory and current_time >= next_trajectory_save_time:            
+             pickle.dump([platelets, density, activation, current_time], open(f'trajectories/platelet positions {int(n_save)}.pkl', 'wb'))
+             n_save += 1
+             next_trajectory_save_time = n_save * trajectory_save_interval
 
         
         # SNAPSHOT OF CURRENT STATE
@@ -355,41 +302,42 @@ def RunSimulation(
         ratio = platelet_count[t] / (Nx * (Ny-2) - INJURY_LENGTH - clot_size[t])
         
         if ratio < PLATELET_RATIO:
-            if MARGINATION_LAYER is None:
-                # use rejection sampling to sample from distribution proportional
-                # to beta * ux
-                Y = None
-                while Y is None:
-                    proposed_Y = 1 + 1e-10 + beta.rvs(a=shape_param, b=shape_param) * (Ny-2-2e-10)
-                    v = ux[int(proposed_Y),0]
-                    accept_prob = v / np.max(ux[1:-1, 0])
-                    if np.random.rand() < accept_prob:
-                        Y = proposed_Y
-                    
-                platelets.append([0, Y])
-            else:
-                platelets.append([0, np.random.choice(y_range)])    
+            # use rejection sampling to sample from distribution proportional
+            # to beta * ux
+            Y = None
+            while Y is None:
+                proposed_Y = 1 + 1e-10 + beta.rvs(a=shape_param, b=shape_param) * (Ny-2-2e-10)
+                v = ux[int(proposed_Y),0]
+                accept_prob = v / np.max(ux[1:-1, 0])
+                if np.random.rand() < accept_prob:
+                    Y = proposed_Y
+                
+            platelets.append([0, Y])
+   
         
         
         if want_core:
             core_size[t] = np.sum(density[1:-1,:]==core_density) - INJURY_LENGTH
         
-        if want_frames and t * Δt >= save_time:
-            density_frames[:,:,frame] = density
-            activation_frames[:,:,frame] = activation
-            
+        if want_frames and current_time >= save_time:
+            to_save = {'density': density,
+                       'activation': activation,
+                       'time': current_time,
+                       'fps': fps,
+                       'gif duration': gif_duration,
+                       'frame interval': Δt_frame,
+                       'clot size': clot_size[last_save:t+1],
+                       'binding_events': binding_events[last_save:t+1],
+                       'detachment_events': detachment_events[last_save:t+1],
+                       'platelet count': platelet_count[last_save:t+1]
+                       }
             if want_flow:
-                if np.any(density != previous_density): # on the off chance that nothing has happened don't bother
-                    new_porosity = 1 - density
-                    porosity_ratio = np.nan_to_num(new_porosity / porosity, 1)
-                    F = np.einsum('ijk,ij->ijk', F, porosity_ratio)
-                    F, ux, uy, vel, ρ, *_ = UpdateLBM(new_porosity, F, ρ0, τ, dP_dx, CELERITY_OF_SOUND_LBM, N_convergence=10, is_print=False)
-                    porosity = new_porosity.copy()
-                    previous_density = density.copy()
-                
-                ux_frames[:,:,frame] = ux
-                uy_frames[:,:,frame] = uy
-                
+                to_save['ux'] = ux
+                to_save['uy'] = uy
+                to_save['rho'] = np.sum(F, axis=2)
+            
+            pickle.dump(to_save, open(f'frames/frame {frame}.pkl', 'wb'))
+            last_save = t
             save_time = next(frame_times)
             frame += 1
         
@@ -400,16 +348,16 @@ def RunSimulation(
         thrombus[1:-1,:] = (density[1:-1] > 0).astype(int)
         
         if constant_binding:
-            stickiness = β * thrombus
+            stickiness = BETA * thrombus
         else:
-            stickiness = β * thrombus * activation
+            stickiness = BETA * thrombus * activation
             
         # RUN UPDATES
         
         ''' BindPlatelets and DetachPlatelets use the same former copy of density 
         to avoid sequence effects'''
         
-        density_post_attachment, binding_events[t], platelets = BindPlatelets(stickiness, density,  platelets, PLATELET_DENSITY, ux, uy, u_ref_bind, flow_dependence)        
+        density_post_attachment, binding_events[t], platelets = BindPlatelets(stickiness, density,  platelets, PLATELET_DENSITY, ux, uy, u_ref_bind)        
         density_post_detachment, detachment_events[t] = DetachPlatelets(density, density_post_attachment, PLATELET_DENSITY, activation, P_DETACH_MAX, MAX_ACTIVATION, ux, uy, u_ref_detach, flow_dependence, constant_detachment, ρ)
         new_density, n_removed = RemoveUntethered(density_post_detachment, INJURY_START, INJURY_END)    
         detachment_events[t] += n_removed
@@ -454,7 +402,6 @@ def RunSimulation(
     'flow_dependence': flow_dependence,
     'T': T,
     'Δt': Δt,
-    'BINDING_TIME_SEC': BINDING_TIME_SEC,
     'DETACHMENT_TIME_SEC': DETACHMENT_TIME_SEC,
     'MAX_ACTIVATION': MAX_ACTIVATION,
     'EPSILON_ACTIVATION': EPSILON_ACTIVATION,
@@ -483,16 +430,7 @@ def RunSimulation(
         save_content['final uy'] = uy
         save_content['rho'] = np.sum(F,axis=2)
     
-    if want_frames:
-        save_content['density_frames'] = density_frames
-        save_content['activation_frames'] = activation_frames
-        save_content['fps'] = fps
-        save_content['gif duration'] = gif_duration
-        save_content['Δt frame'] = Δt_frame
-        if want_flow:
-            save_content['ux_frames'] = ux_frames
-            save_content['uy_frames'] = uy_frames
-            save_content['rho'] = np.sum(F,axis=2)
+    
     
     if save_file is not None:
         pickle.dump(save_content, open(save_file, 'wb'))
