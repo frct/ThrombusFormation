@@ -19,8 +19,8 @@ T = 600
 for i, β in enumerate(beta_values):
     for rep in range(n_reps):
         #save_name = f'calibration/simulation {rep+1} of β = {β} trajectories with sigma =0.05.pkl'
-        save_name = f'simulation of β = {β}.pkl'
-        res = RunSimulation(save_name, T=T, BETA = β, DETACHMENT_TIME_SEC=0.1, flow_dependence=True, want_frames=True)
+        save_name = f'simulation of β = {β} without detachment.pkl'
+        res = RunSimulation(save_name, T=T, BETA = β, DETACHMENT_TIME_SEC=np.inf, flow_dependence=True, want_frames=True)
         plt.figure()
         t = np.array([i * res['Δt'] for i in range(len(res['clot size']))])
         plt.plot(t, res['clot size'])
